@@ -53,10 +53,10 @@ All coordinates below are relative to the safe-area origin (`oy = DISK_UI_Y = 18
 | Logo (bitmap)  | ox + 8                     | +4          | 42  | 42 | SATA/NVMe icon, was 48px                |
 | Device name    | ox + 56                    | +5 / +9     | -   | -  | size 3 if <=4 chars else size 2 at +9   |
 | Model name     | ox + 56                    | +32         | 145 | 8  | size 1, truncated; tucked under name    |
-| CAP box        | ox + 8                     | +51         | 95  | 31 | grown vs. old 25px                      |
-| CAP value      | ox + 96                    | +64         | -   | -  | right-aligned (leaves room for label)   |
-| TEMP box       | ox + 109                   | +51         | 95  | 31 | grown vs. old 25px                      |
-| TEMP value     | ox + 197                   | +64         | -   | -  | right-aligned (leaves room for label)   |
+| CAP box        | ox + 8                     | +50         | 117 | 31 | golden ratio (~0.618); label top-right  |
+| CAP value      | ox + 118                   | +62         | -   | -  | right-aligned; always GB (binary)       |
+| TEMP box       | ox + 131                   | +50         | 73  | 31 | golden ratio (~0.382); label top-right  |
+| TEMP value     | ox + 197                   | +62         | -   | -  | right-aligned (2 digits only)           |
 | Clock icon     | ox + 11                    | +83         | -   | -  | 14px, no border (borderless strip)      |
 | Runtime text   | ox + 30                    | +88         | 165 | 8  | size 1, truncated                       |
 

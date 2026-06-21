@@ -132,14 +132,12 @@ static void set_capacity_label(Disk &d, const cJSON *dev, const cJSON *disk_root
         return;
     }
 
+    // Always report capacity in binary GB (GiB, 1024^3 bytes). We never roll over
+    // to TB so the CAP box stays a single consistent unit, e.g. a "1 TB" drive
+    // (1.0995e12 bytes) reads as 1024 GB rather than 1.0 TB.
     const char *unit = "B";
     double v = (double)d.capacity_bytes;
-    if (v >= 1000.0 * 1000.0 * 1000.0 * 1000.0)
-    {
-        v /= 1000.0 * 1000.0 * 1000.0 * 1000.0;
-        unit = "TB";
-    }
-    else if (v >= 1000.0 * 1000.0 * 1000.0)
+    if (v >= 1000.0 * 1000.0 * 1000.0)
     {
         v /= 1000.0 * 1000.0 * 1000.0;
         unit = "GB";
@@ -148,6 +146,11 @@ static void set_capacity_label(Disk &d, const cJSON *dev, const cJSON *disk_root
     {
         v /= 1000.0 * 1000.0;
         unit = "MB";
+    }
+    else if (v >= 1000.0)
+    {
+        v /= 1000.0;
+        unit = "KB";
     }
 
     if (v >= 10.0)
@@ -238,7 +241,7 @@ static char *http_get_body(const char *url, int *out_len, int *out_status)
     }
 
     acc.buf[acc.len] = '\0';
-    ESP_LOGI(TAG, "received %d bytes (Content-Length hdr=%d)", acc.len, content_len);
+    (void)content_len;
     *out_len = acc.len;
     return acc.buf;
 }
@@ -256,23 +259,7 @@ bool scrutiny_fetch_now()
         disks_note_fetch_fail();
         return false;
     }
-
-    ESP_LOGI(TAG, "HTTP %d, body len=%d, free heap=%lu",
-             status, len, (unsigned long)esp_get_free_heap_size());
-    // Log the start and tail of the body so a truncated/garbled payload is
-    // immediately visible in the serial log.
-    {
-        char head[81];
-        int hn = len < 80 ? len : 80;
-        memcpy(head, body, hn);
-        head[hn] = '\0';
-        ESP_LOGI(TAG, "body head: %s", head);
-        if (len > 80)
-        {
-            int ts = len - 80;
-            ESP_LOGI(TAG, "body tail: %s", body + ts);
-        }
-    }
+    (void)status;
 
     cJSON *root = cJSON_Parse(body);
     if (!root)

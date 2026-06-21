@@ -2,6 +2,8 @@
 #include "epd_gfx.hpp"
 #include "icons/nvme_bitmap.h"
 #include "icons/sata_bitmap.h"
+#include "icons/cap_bitmap.h"
+#include "icons/temp_bitmap.h"
 
 #include <cstring>
 #include <cstdio>
@@ -231,8 +233,23 @@ static void draw_metric_box(EpdGfx &g, int x, int y, int w, int h, const char *l
     g.drawRect(x, y, w, h, EPD_BLACK);
     g.setTextColor(EPD_BLACK);
     g.setTextSize(1);
-    g.setCursor(x + 6, y + 4);
+    // Label hugs the top-right corner: 2px top margin, 2px right margin. Glyph ink
+    // spans (textWidth-1) px, so the ink's right edge lands at (x+w-2) when the
+    // cursor is at x + w - 1 - textWidth.
+    g.setCursor(x + w - 1 - g.textWidth(label), y + 2);
     g.print(label);
+}
+
+// Draw a 24x24 mono icon hugging the left edge of a metric box, vertically
+// centered. Returns the x just right of the icon so callers can shift values.
+static int draw_metric_icon(EpdGfx &g, int box_x, int box_y, int box_h,
+                            const BitmapIcon &icon)
+{
+    const int pad = 4;
+    int iy = box_y + (box_h - icon.height) / 2;
+    draw_mono_bitmap_scaled(g, box_x + pad, iy, icon.width, icon.height,
+                            icon.bitmap, icon.width, icon.height, icon.row_bytes);
+    return box_x + pad + icon.width;
 }
 
 static void draw_degree(EpdGfx &g, int x, int y)
@@ -304,11 +321,11 @@ static void format_power_on(int64_t hours, char *out, size_t cap)
     if (days >= 365)
     {
         int y10 = (int)((hours * 10 + (365 * 24 / 2)) / (365 * 24));
-        snprintf(out, cap, "%d.%dy %lldh", y10 / 10, y10 % 10, (long long)hours);
+        snprintf(out, cap, "%d.%dy (%lldh)", y10 / 10, y10 % 10, (long long)hours);
     }
     else
     {
-        snprintf(out, cap, "%ldd %lldh", days, (long long)hours);
+        snprintf(out, cap, "%ldd (%lldh)", days, (long long)hours);
     }
 }
 
@@ -372,7 +389,7 @@ void display_show_disk(const DiskView &v)
 
     draw_frame(g);
 
-    draw_storage_logo(g, ox + 8, oy + 4, 42, 42, d);
+    draw_storage_logo(g, ox + 8, oy + 6, 42, 42, d);
 
     const char *status = health_label(d.health);
     char ibuf[16];
@@ -399,19 +416,26 @@ void display_show_disk(const DiskView &v)
 
     g.setTextColor(EPD_BLACK);
     g.setTextSize((strlen(d.device_name) <= 4) ? 3 : 2);
-    g.setCursor(ox + 56, oy + ((strlen(d.device_name) <= 4) ? 5 : 9));
+    g.setCursor(ox + 56, oy + ((strlen(d.device_name) <= 4) ? 9 : 13));
     g.print(d.device_name[0] ? d.device_name : "disk");
 
     g.setTextSize(1);
-    g.setCursor(ox + 56, oy + 32);
+    g.setCursor(ox + 56, oy + 36);
     print_truncated(g, d.model_name, 145);
 
     // Metric value blocks are ~16px tall; box is 31px, so y = top + (31-16)/2
     // keeps the value vertically centered in the box.
-    draw_metric_box(g, ox + 8, oy + 50, 95, 31, "CAP");
-    print_capacity_value_right(g, ox + 96, oy + 62, d.capacity_label);
+    // CAP/TEMP widths follow the golden ratio (~0.618 / 0.382) across the 190px
+    // span (with a 6px gap): CAP gets 117px (capacity strings are longer), TEMP
+    // only 73px (temperatures are 2 digits). Outer extents are unchanged.
+    draw_metric_box(g, ox + 8, oy + 50, 117, 31, "CAP");
+    draw_metric_icon(g, ox + 8, oy + 50, 31,
+                     {cap_bitmap, cap_width, cap_height, cap_row_bytes});
+    print_capacity_value_right(g, ox + 118, oy + 62, d.capacity_label);
 
-    draw_metric_box(g, ox + 109, oy + 50, 95, 31, "TEMP");
+    draw_metric_box(g, ox + 131, oy + 50, 73, 31, "TEMP");
+    draw_metric_icon(g, ox + 131, oy + 50, 31,
+                     {temp_bitmap, temp_width, temp_height, temp_row_bytes});
     draw_temp_value_right(g, ox + 197, oy + 62, d.temp);
 
     draw_clock_icon(g, ox + 11, oy + 84);
