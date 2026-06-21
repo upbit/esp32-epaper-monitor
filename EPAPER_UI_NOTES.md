@@ -9,11 +9,11 @@
   - `DISK_UI_W = 212`
   - `DISK_UI_H = 104`
   - `DISK_UI_X = 0`
-  - `DISK_UI_Y = 9`
+  - `DISK_UI_Y = 18`
 
 Do not position disk-page UI against `g.width()` / `g.height()` unless the element is intended to use the full controller framebuffer. For the visible disk UI, use the 212x104 safe area.
 
-The visible glass appears vertically centered inside the `250 x 122` controller framebuffer. Draw the disk page at `y = 9`; drawing from `y = 0` clips the top of the UI and leaves blank space at the bottom.
+The visible glass appears vertically centered inside the `250 x 122` controller framebuffer. Draw the disk page at `y = 18`; drawing from `y = 0` clips the top of the UI and leaves blank space at the bottom.
 
 ## Text Metrics
 
@@ -40,6 +40,32 @@ The disk page is based on the left half of the original UI mockup, simplified fo
 - Bottom power-on time strip.
 
 The right-side temperature history chart was removed because it does not fit legibly on this panel.
+
+### Current Coordinates
+
+All coordinates below are relative to the safe-area origin (`oy = DISK_UI_Y = 18`,
+`ox = DISK_UI_X = 0`), matching `display_show_disk()` in `src/display.cpp`.
+
+| Element        | x                          | y (rel. oy) | w   | h  | Notes                                   |
+|----------------|----------------------------|-------------|-----|----|-----------------------------------------|
+| Index text     | right-aligned, DISK_UI_W-8 | +7          | -   | -  | `idx/total`, e.g. `5/11`, size 1        |
+| Status badge   | left of index, 6px gap     | +5          | tw+3| 11 | outlined box, 2px L/R/T + 1px B padding  |
+| Logo (bitmap)  | ox + 8                     | +4          | 42  | 42 | SATA/NVMe icon, was 48px                |
+| Device name    | ox + 56                    | +5 / +9     | -   | -  | size 3 if <=4 chars else size 2 at +9   |
+| Model name     | ox + 56                    | +32         | 145 | 8  | size 1, truncated; tucked under name    |
+| CAP box        | ox + 8                     | +51         | 95  | 31 | grown vs. old 25px                      |
+| CAP value      | ox + 96                    | +64         | -   | -  | right-aligned (leaves room for label)   |
+| TEMP box       | ox + 109                   | +51         | 95  | 31 | grown vs. old 25px                      |
+| TEMP value     | ox + 197                   | +64         | -   | -  | right-aligned (leaves room for label)   |
+| Clock icon     | ox + 11                    | +83         | -   | -  | 14px, no border (borderless strip)      |
+| Runtime text   | ox + 30                    | +88         | 165 | 8  | size 1, truncated                       |
+
+The top-right status was collapsed from two lines (health on +7, index on +17) into
+a single right-aligned line `health | idx/total` at +7, freeing a row. Top space was
+compressed by shrinking the logo (48 -> 42) and moving it up, so the device name +
+model label stack tightly beside it. The reclaimed vertical room was spent growing
+the CAP/TEMP boxes and the runtime strip. Bottom of the runtime strip ends at
+`oy + 100`, leaving padding inside the 104px safe area.
 
 ## Drawing Guidelines
 

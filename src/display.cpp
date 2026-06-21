@@ -1,5 +1,7 @@
 #include "display.hpp"
 #include "epd_gfx.hpp"
+#include "icons/nvme_bitmap.h"
+#include "icons/sata_bitmap.h"
 
 #include <cstring>
 #include <cstdio>
@@ -92,6 +94,30 @@ static const char *health_label(DiskHealth h)
     }
 }
 
+static char lower_ascii(char c)
+{
+    return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
+}
+
+static bool contains_ci(const char *s, const char *needle)
+{
+    if (!s || !needle || !*needle)
+        return false;
+    for (; *s; ++s)
+    {
+        const char *a = s;
+        const char *b = needle;
+        while (*a && *b && lower_ascii(*a) == lower_ascii(*b))
+        {
+            ++a;
+            ++b;
+        }
+        if (!*b)
+            return true;
+    }
+    return false;
+}
+
 static void draw_stale(EpdGfx &g)
 {
     const int w = (g.width() < DISK_UI_W) ? g.width() : DISK_UI_W;
@@ -142,51 +168,55 @@ static void print_truncated(EpdGfx &g, const char *s, int max_px)
     g.print(buf);
 }
 
-static void draw_storage_icon(EpdGfx &g, int x, int y, int w, int h, const char *type)
+static void draw_mono_bitmap_scaled(EpdGfx &g, int x, int y, int w, int h,
+                                    const uint8_t *bitmap, int src_w, int src_h, int row_bytes)
 {
-    g.drawRect(x, y, w, h, EPD_BLACK);
-    g.drawRect(x + 2, y + 2, w - 4, h - 4, EPD_BLACK);
-
-    if (type && strcmp(type, "NVMe") == 0)
+    if (!bitmap || w <= 0 || h <= 0 || src_w <= 0 || src_h <= 0 || row_bytes <= 0)
+        return;
+    for (int dy = 0; dy < h; ++dy)
     {
-        // Simplified M.2 module.
-        g.drawRect(x + 5, y + 11, w - 10, 12, EPD_BLACK);
-        g.fillRect(x + 9, y + 14, 5, 5, EPD_BLACK);
-        g.drawRect(x + 18, y + 14, 7, 5, EPD_BLACK);
-        g.drawRect(x + 28, y + 14, 7, 5, EPD_BLACK);
-        g.drawCircle(x + w - 9, y + 17, 2, EPD_BLACK);
-        for (int i = 0; i < 5; ++i)
-            g.drawVLine(x + 7 + i * 3, y + 25, 4, EPD_BLACK);
+        int sy = dy * src_h / h;
+        for (int dx = 0; dx < w; ++dx)
+        {
+            int sx = dx * src_w / w;
+            uint8_t b = bitmap[sy * row_bytes + sx / 8];
+            if (b & (0x80 >> (sx & 7)))
+                g.drawPixel(x + dx, y + dy, EPD_BLACK);
+        }
     }
+}
+
+struct BitmapIcon
+{
+    const uint8_t *bitmap;
+    int width;
+    int height;
+    int row_bytes;
+};
+
+static BitmapIcon storage_icon_for_disk(const Disk &d)
+{
+    if (contains_ci(d.device_type, "nvme") ||
+        contains_ci(d.device_name, "nvme") ||
+        contains_ci(d.model_name, "nvme"))
+    {
+        return {nvme_bitmap, nvme_width, nvme_height, nvme_row_bytes};
+    }
+    return {sata_bitmap, sata_width, sata_height, sata_row_bytes};
+}
+
+static void draw_storage_logo(EpdGfx &g, int x, int y, int w, int h, const Disk &d)
+{
+    const BitmapIcon icon = storage_icon_for_disk(d);
+    int bw = w;
+    int bh = h;
+    if (icon.width * h > icon.height * w)
+        bh = w * icon.height / icon.width;
     else
-    {
-        // Simplified 3.5" SATA/HDD face.
-        int cx = x + w / 2;
-        int cy = y + h / 2 + 1;
-        g.drawCircle(cx, cy, 12, EPD_BLACK);
-        g.drawCircle(cx, cy, 4, EPD_BLACK);
-        g.drawLine(cx + 3, cy + 2, x + w - 8, y + h - 8, EPD_BLACK);
-        g.drawCircle(x + w - 8, y + h - 8, 2, EPD_BLACK);
-        g.drawCircle(x + 5, y + 5, 1, EPD_BLACK);
-        g.drawCircle(x + w - 6, y + 5, 1, EPD_BLACK);
-        g.drawCircle(x + 5, y + h - 6, 1, EPD_BLACK);
-        g.drawCircle(x + w - 6, y + h - 6, 1, EPD_BLACK);
-    }
-}
+        bw = h * icon.width / icon.height;
 
-static void draw_capacity_icon(EpdGfx &g, int x, int y)
-{
-    g.drawRect(x + 2, y + 4, 12, 12, EPD_BLACK);
-    g.drawHLine(x + 3, y + 7, 10, EPD_BLACK);
-    g.drawHLine(x + 3, y + 10, 10, EPD_BLACK);
-    g.drawHLine(x + 3, y + 13, 10, EPD_BLACK);
-}
-
-static void draw_thermo_icon(EpdGfx &g, int x, int y)
-{
-    g.drawRect(x + 5, y + 1, 4, 12, EPD_BLACK);
-    g.drawCircle(x + 7, y + 15, 4, EPD_BLACK);
-    g.fillRect(x + 6, y + 8, 2, 6, EPD_BLACK);
+    draw_mono_bitmap_scaled(g, x + (w - bw) / 2, y + (h - bh) / 2,
+                            bw, bh, icon.bitmap, icon.width, icon.height, icon.row_bytes);
 }
 
 static void draw_clock_icon(EpdGfx &g, int x, int y)
@@ -201,7 +231,7 @@ static void draw_metric_box(EpdGfx &g, int x, int y, int w, int h, const char *l
     g.drawRect(x, y, w, h, EPD_BLACK);
     g.setTextColor(EPD_BLACK);
     g.setTextSize(1);
-    g.setCursor(x + 20, y + 4);
+    g.setCursor(x + 6, y + 4);
     g.print(label);
 }
 
@@ -223,6 +253,29 @@ static void draw_temp_value(EpdGfx &g, int x, int y, int32_t temp)
     g.print("C");
 }
 
+static int temp_value_width(int32_t temp)
+{
+    char buf[12];
+    snprintf(buf, sizeof(buf), "%d", (int)temp);
+    return (int)strlen(buf) * EpdGfx::charW(2) + 2 + 3 + EpdGfx::charW(1);
+}
+
+static void draw_temp_value_right(EpdGfx &g, int right_x, int y, int32_t temp)
+{
+    draw_temp_value(g, right_x - temp_value_width(temp), y, temp);
+}
+
+static int capacity_value_width(const char *label)
+{
+    char num[8] = "--";
+    char unit[8] = "";
+    if (label && label[0] && strcmp(label, "--") != 0)
+    {
+        sscanf(label, "%7s %7s", num, unit);
+    }
+    return (int)strlen(num) * EpdGfx::charW(2) + 2 + (int)strlen(unit) * EpdGfx::charW(1);
+}
+
 static void print_capacity_value(EpdGfx &g, int x, int y, const char *label)
 {
     char num[8] = "--";
@@ -238,6 +291,11 @@ static void print_capacity_value(EpdGfx &g, int x, int y, const char *label)
     g.setTextSize(1);
     g.setCursor(g.cursorX() + 2, y + 8);
     g.print(unit);
+}
+
+static void print_capacity_value_right(EpdGfx &g, int right_x, int y, const char *label)
+{
+    print_capacity_value(g, right_x - capacity_value_width(label), y, label);
 }
 
 static void format_power_on(int64_t hours, char *out, size_t cap)
@@ -314,41 +372,54 @@ void display_show_disk(const DiskView &v)
 
     draw_frame(g);
 
-    draw_storage_icon(g, ox + 8, oy + 12, 38, 40, d.device_type);
-    draw_badge(g, ox + 54, oy + 8, d.device_type[0] ? d.device_type : "DISK", false, 1);
-    draw_badge(g, ox + 92, oy + 8, health_label(d.health), d.health != DiskHealth::OK, 1);
+    draw_storage_logo(g, ox + 8, oy + 4, 42, 42, d);
+
+    const char *status = health_label(d.health);
+    char ibuf[16];
+    snprintf(ibuf, sizeof(ibuf), "%d/%d", v.index + 1, v.total);
+    g.setTextColor(EPD_BLACK);
+    g.setTextSize(1);
+
+    // Right-aligned: [STATUS box]  index/total
+    int idx_w = g.textWidth(ibuf);
+    int idx_x = ox + DISK_UI_W - 8 - idx_w;
+    g.setCursor(idx_x, oy + 7);
+    g.print(ibuf);
+
+    // Status badge with a 2px-padded outline to set it apart from the index text.
+    // textWidth() = len*6, where each glyph is 5px ink + 1px trailing gap. So the
+    // ink spans (textWidth-1) px; box_w = textWidth+3 gives 2px padding on left/right.
+    int box_w = g.textWidth(status) + 3;
+    int box_h = 11; // 8px glyph + 1px bottom + 2px top padding
+    int box_x = idx_x - 6 - box_w;
+    int box_y = oy + 5; // index text sits at oy+7, so box top is 2px above its glyphs
+    g.drawRect(box_x, box_y, box_w, box_h, EPD_BLACK);
+    g.setCursor(box_x + 2, box_y + 2);
+    g.print(status);
 
     g.setTextColor(EPD_BLACK);
     g.setTextSize((strlen(d.device_name) <= 4) ? 3 : 2);
-    g.setCursor(ox + 54, oy + ((strlen(d.device_name) <= 4) ? 22 : 26));
+    g.setCursor(ox + 56, oy + ((strlen(d.device_name) <= 4) ? 5 : 9));
     g.print(d.device_name[0] ? d.device_name : "disk");
 
     g.setTextSize(1);
-    g.setCursor(ox + 54, oy + 45);
-    g.print("MODEL");
-    g.setCursor(ox + 54, oy + 54);
+    g.setCursor(ox + 56, oy + 32);
     print_truncated(g, d.model_name, 145);
 
-    draw_metric_box(g, ox + 8, oy + 63, 95, 25, "CAP");
-    draw_capacity_icon(g, ox + 13, oy + 69);
-    print_capacity_value(g, ox + 32, oy + 72, d.capacity_label);
+    // Metric value blocks are ~16px tall; box is 31px, so y = top + (31-16)/2
+    // keeps the value vertically centered in the box.
+    draw_metric_box(g, ox + 8, oy + 50, 95, 31, "CAP");
+    print_capacity_value_right(g, ox + 96, oy + 62, d.capacity_label);
 
-    draw_metric_box(g, ox + 109, oy + 63, 95, 25, "TEMP");
-    draw_thermo_icon(g, ox + 114, oy + 69);
-    draw_temp_value(g, ox + 136, oy + 72, d.temp);
+    draw_metric_box(g, ox + 109, oy + 50, 95, 31, "TEMP");
+    draw_temp_value_right(g, ox + 197, oy + 62, d.temp);
 
-    g.drawRect(ox + 8, oy + 90, 196, 12, EPD_BLACK);
-    draw_clock_icon(g, ox + 11, oy + 89);
+    draw_clock_icon(g, ox + 11, oy + 84);
     char pbuf[28];
     format_power_on(d.power_on_hours, pbuf, sizeof(pbuf));
     g.setTextSize(1);
-    g.setCursor(ox + 30, oy + 93);
+    g.setCursor(ox + 30, oy + 88);
     print_truncated(g, pbuf, 165);
-
-    char ibuf[24];
-    snprintf(ibuf, sizeof(ibuf), "%d/%d", v.index + 1, v.total);
-    g.setCursor(ox + 184, oy + 8);
-    g.print(ibuf);
 
     if (v.stale)
         draw_stale(g);
