@@ -8,7 +8,7 @@
 // Firmware identity
 // ---------------------------------------------------------------------------
 #ifndef FW_VERSION
-#define FW_VERSION "0.1.0"
+#define FW_VERSION "1.0.0"
 #endif
 
 // ---------------------------------------------------------------------------
@@ -33,10 +33,10 @@
 // Cadence / behaviour tunables
 // ---------------------------------------------------------------------------
 #ifndef DISPLAY_PER_DISK_SECONDS
-#define DISPLAY_PER_DISK_SECONDS 15
+#define DISPLAY_PER_DISK_SECONDS 30
 #endif
 #ifndef FETCH_INTERVAL_SEC
-#define FETCH_INTERVAL_SEC 600
+#define FETCH_INTERVAL_SEC 3600
 #endif
 #ifndef HTTP_FETCH_TIMEOUT_MS
 #define HTTP_FETCH_TIMEOUT_MS 10000

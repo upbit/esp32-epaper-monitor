@@ -331,7 +331,8 @@ static void format_power_on(int64_t hours, char *out, size_t cap)
 
 // --- pages -----------------------------------------------------------------
 void display_show_info(const char *ssid, const char *ip, const char *version,
-                       int last_fetch_min, int disks_count, bool stale)
+                       int last_fetch_min, int disks_count, bool stale,
+                       int fetch_ok)
 {
     EpdGfx &g = s_gfx;
     g.clear(EPD_WHITE);
@@ -370,6 +371,12 @@ void display_show_info(const char *ssid, const char *ip, const char *version,
             g.printf("Last fetch: %dm ago", last_fetch_min);
         else
             g.printf("Last fetch: %dh ago", last_fetch_min / 60);
+        y += 12;
+    }
+    if (fetch_ok >= 0)
+    {
+        g.setCursor(2, y);
+        g.printf("Status: %s", fetch_ok ? "OK" : "FAILED");
         y += 12;
     }
     if (stale)

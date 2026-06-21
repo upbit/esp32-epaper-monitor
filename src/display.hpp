@@ -19,8 +19,11 @@ esp_err_t display_init();
 
 // Startup self-check page == WiFi info page (shared renderer).
 // Pass last_fetch_min < 0 and disks < 0 to render the minimal boot variant.
+// fetch_ok: -1 = unknown (no fetch yet, line hidden), 0 = last fetch failed,
+//           1 = last fetch succeeded. Mirrors the carousel's status semantics.
 void display_show_info(const char *ssid, const char *ip, const char *version,
-                       int last_fetch_min, int disks_count, bool stale);
+                       int last_fetch_min, int disks_count, bool stale,
+                       int fetch_ok);
 
 void display_show_disk(const DiskView &v);
 void display_show_message(const char *title, const char *body);

@@ -106,7 +106,8 @@ static void display_task(void *)
             }
             // WiFi info page after a full round (requirement 5.5).
             display_show_info(wifi_ssid(), wifi_ip(), FW_VERSION,
-                              compute_minutes(nullptr), n, stale);
+                              compute_minutes(nullptr), n, stale,
+                              (disks_consec_fail() == 0) ? 1 : 0);
             vTaskDelay(pdMS_TO_TICKS(DISPLAY_PER_DISK_SECONDS * 1000));
         }
 
@@ -149,16 +150,22 @@ extern "C" void app_main(void)
         display_show_message("WiFi", "connecting... " WIFI_SSID);
     }
 
-    // (2) Boot self-check page (>= 5s)
     web_server_start();
-    display_show_info(wifi_ssid(), wifi_ip(), FW_VERSION, -1, -1, false);
-    vTaskDelay(pdMS_TO_TICKS(5000));
 
-    // (3) First fetch (synchronous)
-    if (!scrutiny_fetch_now())
+    // (2) First fetch (synchronous), so the boot page can report its result.
+    display_show_message("E-Paper Monitor", "Fetching status...");
+    bool first_ok = scrutiny_fetch_now();
+
+    // (3) Boot self-check page with the fetch status (>= 5s), consistent with
+    //     the carousel's info page.
     {
-        display_show_message("No data", "First fetch failed. Retrying...");
+        static Disk boot_round[MAX_DISKS];
+        int n = disks_snapshot(boot_round, MAX_DISKS);
+        display_show_info(wifi_ssid(), wifi_ip(), FW_VERSION,
+                          compute_minutes(nullptr), n, compute_stale(),
+                          first_ok ? 1 : 0);
     }
+    vTaskDelay(pdMS_TO_TICKS(5000));
 
     // (4) Background tasks + carousel
     xTaskCreate(fetch_task, "fetch_task", 6144, nullptr, 5, &s_fetch_task);
