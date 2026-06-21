@@ -1,175 +1,142 @@
-// E-Paper Monitor - 2.13" V2 (GxEPD2_213_B72 / GDEH0213B72, SSD1675A) refresh test
+// E-Paper Monitor (ESP-IDF) - Scrutiny disk-health carousel on a 2.13" SSD1675A.
 //
-// Migrated from the ink_test example (GxEPD2 by Jean-Marc Zingg).
-// Library: https://github.com/ZinggJM/GxEPD2
-//
-// ===================== Wiring (ESP32 DevKit) =====================
-//   E-Paper Driver Board        ESP32 DevKit
-//   GND      -------->  GND
-//   3V3      -------->  3V3
-//   SCK      -------->  GPIO18  (HSPI/VSPI SCK)
-//   SDA(DIN) -------->  GPIO23  (MOSI)
-//   RST      -------->  GPIO25
-//   DC       -------->  GPIO26
-//   CS1      -------->  GPIO27
-//   BUSY     -------->  GPIO33
-//   CS2      -------->  (not connected)
-// =================================================================
+// Task layout (requirement 7):
+//   - app_main : startup orchestration (WiFi -> boot page -> first fetch)
+//   - fetch_task   : performs Scrutiny fetches when notified
+//   - display_task : disk carousel + WiFi info page + fetch triggering
+//   - esp_http_server internal task : dashboard
+#include <cstring>
 
-#include <Arduino.h>
-#include <SPI.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_log.h"
+#include "esp_system.h"
+#include "nvs_flash.h"
 
-// Enable GxEPD2_GFX base class (optional but matches the example style)
-#define ENABLE_GxEPD2_GFX 1
+#include "config.h"
+#include "disks.hpp"
+#include "display.hpp"
+#include "wifi_sta.hpp"
+#include "scrutiny_fetch.hpp"
+#include "web_server.hpp"
 
-#include <GxEPD2_BW.h>
-#include <Fonts/FreeMonoBold9pt7b.h>
+static const char* TAG = "APP";
 
-// ---- Pin mapping (matches the wiring table above) ----
-#define EPD_CS 27
-#define EPD_DC 26
-#define EPD_RST 25
-#define EPD_BUSY 33
-// SCK = 18, MOSI = 23 are ESP32 hardware-SPI defaults; no remap needed.
+static TaskHandle_t s_fetch_task = nullptr;
 
-// ---- Display instance: 2.13" V2 (GDEH0213B72) ----
-GxEPD2_BW<GxEPD2_213_B72, GxEPD2_213_B72::HEIGHT> display(
-    GxEPD2_213_B72(/*CS=*/EPD_CS, /*DC=*/EPD_DC, /*RST=*/EPD_RST, /*BUSY=*/EPD_BUSY));
-
-// ---------------------------------------------------------------------------
-// Test routines
-// ---------------------------------------------------------------------------
-
-static void helloWorld()
-{
-    display.setRotation(1);
-    display.setFont(&FreeMonoBold9pt7b);
-    display.setTextColor(GxEPD_BLACK);
-
-    const char text[] = "Hello World!";
-    int16_t tbx, tby;
-    uint16_t tbw, tbh;
-    display.getTextBounds(text, 0, 0, &tbx, &tby, &tbw, &tbh);
-    uint16_t x = ((display.width() - tbw) / 2) - tbx;
-    uint16_t y = ((display.height() - tbh) / 2) - tby;
-
-    display.setFullWindow();
-    display.firstPage();
-    do
-    {
-        display.fillScreen(GxEPD_WHITE);
-        display.setCursor(x, y);
-        display.print(text);
-    } while (display.nextPage());
-}
-
-static void drawBorderAndCorners()
-{
-    display.setRotation(1);
-    display.setFullWindow();
-    display.firstPage();
-    do
-    {
-        display.fillScreen(GxEPD_WHITE);
-        // outer border
-        display.drawRect(0, 0, display.width(), display.height(), GxEPD_BLACK);
-        // corner markers (helps to verify orientation & full coverage)
-        display.fillRect(0, 0, 10, 10, GxEPD_BLACK);
-        display.fillRect(display.width() - 10, 0, 10, 10, GxEPD_BLACK);
-        display.fillRect(0, display.height() - 10, 10, 10, GxEPD_BLACK);
-        display.fillRect(display.width() - 10, display.height() - 10, 10, 10, GxEPD_BLACK);
-        // diagonal cross to confirm pixels everywhere
-        display.drawLine(0, 0, display.width() - 1, display.height() - 1, GxEPD_BLACK);
-        display.drawLine(display.width() - 1, 0, 0, display.height() - 1, GxEPD_BLACK);
-    } while (display.nextPage());
-}
-
-static void partialUpdateCounter()
-{
-    if (!display.epd2.hasPartialUpdate)
-    {
-        Serial.println("[INFO] Panel has no partial update support, skip.");
-        return;
-    }
-
-    display.setRotation(1);
-    display.setFont(&FreeMonoBold9pt7b);
-    display.setTextColor(GxEPD_BLACK);
-
-    const char *label = "Count:";
-    int16_t tbx, tby;
-    uint16_t tbw, tbh;
-    display.getTextBounds(label, 0, 0, &tbx, &tby, &tbw, &tbh);
-
-    uint16_t lx = 10 - tbx;
-    uint16_t ly = ((display.height() - tbh) / 2) - tby;
-
-    // Region for the counter number, to the right of the label.
-    uint16_t nx = lx + tbw + 8;
-    uint16_t ny = ly;
-    uint16_t nw = display.width() - nx - 10;
-    uint16_t nh = tbh + 6;
-
-    // Full refresh first to draw the static label.
-    display.setFullWindow();
-    display.firstPage();
-    do
-    {
-        display.fillScreen(GxEPD_WHITE);
-        display.setCursor(lx, ly);
-        display.print(label);
-    } while (display.nextPage());
-
-    // Then partial refresh just for the changing counter region.
-    for (int i = 0; i < 5; ++i)
-    {
-        display.setPartialWindow(nx, ny - tbh, nw, nh);
-        display.firstPage();
-        do
-        {
-            display.fillScreen(GxEPD_WHITE);
-            display.setCursor(nx, ny);
-            display.print(i);
-        } while (display.nextPage());
-        delay(1000);
+// --- fetch task: blocks until notified, then performs one fetch -----------
+static void fetch_task(void*) {
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        if (!wifi_is_connected()) { ESP_LOGW(TAG, "fetch skipped: WiFi down"); continue; }
+        ESP_LOGI(TAG, "fetch triggered");
+        scrutiny_fetch_now();
     }
 }
 
-// ---------------------------------------------------------------------------
-// Arduino entry points
-// ---------------------------------------------------------------------------
-
-void setup()
-{
-    Serial.begin(115200);
-    delay(200);
-    Serial.println();
-    Serial.println("E-Paper 2.13\" V2 (GxEPD2_213_B72) refresh test starting...");
-
-    // Re-route HW SPI to the wired pins (SCK=18, MISO=19 unused, MOSI=23, SS=CS).
-    // Most ESP32 Arduino cores already default to these pins, but doing it
-    // explicitly makes the wiring above match the code.
-    SPI.begin(/*SCK=*/18, /*MISO=*/19, /*MOSI=*/23, /*SS=*/EPD_CS);
-
-    // 20ms reset pulse — default for bare panels with DESPI-C02 / direct wiring.
-    display.init(115200, true, 20, false);
-
-    Serial.println("[1/3] Full refresh: Hello World");
-    helloWorld();
-    delay(2000);
-
-    Serial.println("[2/3] Full refresh: border + corners + cross");
-    drawBorderAndCorners();
-    delay(2000);
-
-    Serial.println("[3/3] Partial refresh: counter");
-    partialUpdateCounter();
-
-    display.hibernate();
-    Serial.println("Done. Panel hibernated.");
+static int compute_minutes(int64_t* out_lf) {
+    int64_t lf = disks_last_fetch_sec();
+    if (out_lf) *out_lf = lf;
+    if (lf < 0) return 0;
+    return (int)((now_sec() - lf) / 60);
 }
 
-void loop()
-{
-    // Nothing to do; the test runs once in setup().
+static bool compute_stale() {
+    int64_t lf = disks_last_fetch_sec();
+    bool too_old = (lf >= 0) && ((now_sec() - lf) > 2LL * FETCH_INTERVAL_SEC);
+    return too_old || (disks_consec_fail() >= FETCH_FAIL_STALE_THRESHOLD);
+}
+
+// --- display task: carousel + WiFi page + fetch triggering ----------------
+static void display_task(void*) {
+    static Disk round[MAX_DISKS];
+    int64_t last_stats = 0;
+
+    for (;;) {
+        // Periodic resource log (requirement 7.4 / 9).
+        if (now_sec() - last_stats >= 60) {
+            ESP_LOGI("STAT", "free_heap=%u disp_stack=%u",
+                     (unsigned)esp_get_free_heap_size(),
+                     (unsigned)uxTaskGetStackHighWaterMark(nullptr));
+            last_stats = now_sec();
+        }
+
+        // Watchdog: too many panel failures -> restart (requirement 7.3).
+        if (display_busy_fail() >= 10) {
+            ESP_LOGE(TAG, "panel failed repeatedly, restarting");
+            vTaskDelay(pdMS_TO_TICKS(500));
+            esp_restart();
+        }
+
+        int n = disks_snapshot(round, MAX_DISKS);
+        bool stale = compute_stale();
+
+        if (n == 0) {
+            display_show_message("No disks", "No data reported. Retrying...");
+            vTaskDelay(pdMS_TO_TICKS(DISPLAY_PER_DISK_SECONDS * 1000));
+        } else {
+            for (int i = 0; i < n; ++i) {
+                int64_t lf;
+                DiskView v;
+                v.disk = &round[i];
+                v.index = i;
+                v.total = n;
+                v.minutes_since_fetch = compute_minutes(&lf);
+                v.stale = stale;
+                display_show_disk(v);
+                vTaskDelay(pdMS_TO_TICKS(DISPLAY_PER_DISK_SECONDS * 1000));
+            }
+            // WiFi info page after a full round (requirement 5.5).
+            display_show_info(wifi_ssid(), wifi_ip(), FW_VERSION,
+                              compute_minutes(nullptr), n, stale);
+            vTaskDelay(pdMS_TO_TICKS(DISPLAY_PER_DISK_SECONDS * 1000));
+        }
+
+        // Trigger a fetch if the interval elapsed (requirement 5.6).
+        int64_t lf = disks_last_fetch_sec();
+        bool due = (lf < 0) || ((now_sec() - lf) >= FETCH_INTERVAL_SEC);
+        if (due && wifi_is_connected() && s_fetch_task) {
+            xTaskNotifyGive(s_fetch_task);
+        }
+    }
+}
+
+extern "C" void app_main(void) {
+    ESP_LOGI(TAG, "=== E-Paper Monitor %s (build %s %s) ===", FW_VERSION, __DATE__, __TIME__);
+    ESP_LOGI(TAG, "cfg: SSID=%s base=%s per_disk=%ds interval=%ds",
+             WIFI_SSID, SCRUTINY_API_BASE, DISPLAY_PER_DISK_SECONDS, FETCH_INTERVAL_SEC);
+
+    esp_err_t nv = nvs_flash_init();
+    if (nv == ESP_ERR_NVS_NO_FREE_PAGES || nv == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ESP_ERROR_CHECK(nvs_flash_init());
+    }
+
+    disks_init();
+
+    if (display_init() != ESP_OK) {
+        ESP_LOGE(TAG, "display init failed");
+    }
+
+    // (1) WiFi
+    wifi_start();
+    display_show_message("E-Paper Monitor", "WiFi connecting...");
+    while (!wifi_wait_connected(60000)) {
+        ESP_LOGW(TAG, "WiFi not up after 60s, still retrying");
+        display_show_message("WiFi", "connecting... " WIFI_SSID);
+    }
+
+    // (2) Boot self-check page (>= 5s)
+    web_server_start();
+    display_show_info(wifi_ssid(), wifi_ip(), FW_VERSION, -1, -1, false);
+    vTaskDelay(pdMS_TO_TICKS(5000));
+
+    // (3) First fetch (synchronous)
+    if (!scrutiny_fetch_now()) {
+        display_show_message("No data", "First fetch failed. Retrying...");
+    }
+
+    // (4) Background tasks + carousel
+    xTaskCreate(fetch_task, "fetch_task", 6144, nullptr, 5, &s_fetch_task);
+    xTaskCreate(display_task, "display_task", 6144, nullptr, 4, nullptr);
 }
