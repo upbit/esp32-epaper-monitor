@@ -9,6 +9,6 @@ void wifi_start();
 // Block until connected (got IP) or timeout. Returns true if connected.
 bool wifi_wait_connected(int timeout_ms);
 
-bool        wifi_is_connected();
-const char* wifi_ip();    // "x.x.x.x" or "0.0.0.0"
-const char* wifi_ssid();  // configured SSID
+bool wifi_is_connected();
+const char *wifi_ip();   // "x.x.x.x" or "0.0.0.0"
+const char *wifi_ssid(); // configured SSID

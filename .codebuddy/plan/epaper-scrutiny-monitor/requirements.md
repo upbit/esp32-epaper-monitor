@@ -163,7 +163,7 @@ BUSY     --------> GPIO33
 
 1. WHEN 项目构建 THEN 系统 SHALL 通过 `include/config.h` 提供以下默认常量，并允许 `build_flags` 或 `secrets.ini` 覆盖：
    - `WIFI_SSID`、`WIFI_PASS`
-   - `SCRUTINY_API_BASE`（默认 `"http://192.168.66.2:8085/api"`，不含尾部 `/`，业务侧拼接 `/summary` 等子路径）
+   - `SCRUTINY_API_BASE`（默认 `"http://192.168.1.1:18085/api"`，不含尾部 `/`，业务侧拼接 `/summary` 等子路径）
    - `DISPLAY_PER_DISK_SECONDS`（默认 15）
    - `FETCH_INTERVAL_SEC`（默认 600，每轮播完一遍硬盘后才检查是否到达该间隔）
    - `HTTP_FETCH_TIMEOUT_MS`（默认 10000）
