@@ -1,4 +1,9 @@
-# 2.13" E-paper UI Notes
+# 2.13" ePaper UI Notes
+
+- 2.13" black/white, HINK-E0213A09
+- drv=GxEPD2_213_B72
+
+![213_UI](213_UI.png)
 
 ## Panel Geometry
 

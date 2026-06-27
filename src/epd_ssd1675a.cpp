@@ -187,13 +187,13 @@ esp_err_t Ssd1675a213::init()
 
     // SPI bus.
     spi_bus_config_t bus = {};
-    bus.mosi_io_num = EPD_PIN_MOSI;
+    bus.mosi_io_num = EPD_PIN_SDA;
     bus.miso_io_num = -1;
     bus.sclk_io_num = EPD_PIN_SCK;
     bus.quadwp_io_num = -1;
     bus.quadhd_io_num = -1;
     bus.max_transfer_sz = 4096;
-    esp_err_t err = spi_bus_initialize(SPI3_HOST, &bus, SPI_DMA_CH_AUTO);
+    esp_err_t err = spi_bus_initialize(EPD_SPI_HOST, &bus, SPI_DMA_CH_AUTO);
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
     {
         ESP_LOGE(TAG, "spi_bus_initialize failed: %s", esp_err_to_name(err));
@@ -206,7 +206,7 @@ esp_err_t Ssd1675a213::init()
     dev.spics_io_num = EPD_PIN_CS;
     dev.queue_size = 4;
     dev.pre_cb = epd_spi_pre;
-    err = spi_bus_add_device(SPI3_HOST, &dev, &_spi);
+    err = spi_bus_add_device(EPD_SPI_HOST, &dev, &_spi);
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG, "spi_bus_add_device failed: %s", esp_err_to_name(err));

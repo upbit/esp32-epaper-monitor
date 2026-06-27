@@ -1,8 +1,6 @@
 // wifi_sta.hpp - STA-mode WiFi with auto-reconnect (ESP-IDF esp_wifi).
 #pragma once
 
-#include <cstdbool>
-
 // Initialise netif/event/wifi and start connecting using compile-time creds.
 void wifi_start();
 

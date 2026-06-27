@@ -1,0 +1,7 @@
+## IDF Component Manager manifest for the main application component.
+## ESP-IDF v6.0 removed the bundled `json` (cJSON) component from core IDF;
+## it is now distributed via the component registry. Declaring it here makes
+## the manager download it and automatically add it as a requirement of `src`,
+## so `#include "cJSON.h"` keeps working.
+dependencies:
+  espressif/cjson: "^1.7.18"

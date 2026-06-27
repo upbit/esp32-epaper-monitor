@@ -57,25 +57,41 @@
 #endif
 
 // ---------------------------------------------------------------------------
-// E-paper wiring (verified hardware) - 2.13" V2 (GDEH0213B72 / SSD1675A)
+// E-paper wiring - 2.13" V2 (GDEH0213B72 / SSD1675A)
+//
+// Defaults below target ESP32-S3-DevKitC-1 and map onto its FSPI IOMUX pins
+// (FSPICLK=12 / FSPID=11 / FSPICS0=10), so the SPI bus runs through IOMUX.
+// Every pin can be overridden via -D build_flags (see platformio.ini), e.g.
+// to move back to an ESP32-WROOM-32:
+//   -DEPD_PIN_SCK=18 -DEPD_PIN_SDA=23 -DEPD_PIN_CS=27
+//   -DEPD_PIN_DC=26  -DEPD_PIN_RST=25 -DEPD_PIN_BUSY=33 -DEPD_SPI_HOST=SPI3_HOST
+//
+// Pin macros follow the e-paper driver-board labels (SCK/SDA/RST/DC/CS/BUSY);
+// EPD_PIN_SDA is the panel's serial-data line (SPI MOSI), not an I2C SDA.
 // ---------------------------------------------------------------------------
 #ifndef EPD_PIN_SCK
-#define EPD_PIN_SCK 18
+#define EPD_PIN_SCK 12
 #endif
-#ifndef EPD_PIN_MOSI
-#define EPD_PIN_MOSI 23
+#ifndef EPD_PIN_SDA
+#define EPD_PIN_SDA 11
 #endif
 #ifndef EPD_PIN_CS
-#define EPD_PIN_CS 27
+#define EPD_PIN_CS 10
 #endif
 #ifndef EPD_PIN_DC
-#define EPD_PIN_DC 26
+#define EPD_PIN_DC 9
 #endif
 #ifndef EPD_PIN_RST
-#define EPD_PIN_RST 25
+#define EPD_PIN_RST 14
 #endif
 #ifndef EPD_PIN_BUSY
-#define EPD_PIN_BUSY 33
+#define EPD_PIN_BUSY 3
+#endif
+
+// SPI peripheral used to drive the panel. On ESP32-S3 SPI2_HOST (FSPI) owns the
+// IOMUX pins used above; on the classic ESP32 use SPI3_HOST (VSPI).
+#ifndef EPD_SPI_HOST
+#define EPD_SPI_HOST SPI2_HOST
 #endif
 
 // SPI clock for the panel (datasheet allows more; keep <= 4 MHz per spec).
