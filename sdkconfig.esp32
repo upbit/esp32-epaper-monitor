@@ -1,0 +1,12 @@
+# Classic ESP32 (nodemcu-32s) specific defaults (4MB Flash, no PSRAM)
+
+# --- Flash: 4MB ---
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
+# --- No PSRAM on this board ---
+# CONFIG_SPIRAM is not set
+
+# --- Partition table (4MB) ---
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions4.csv"

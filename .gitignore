@@ -5,9 +5,12 @@
 managed_components/
 secrets.ini
 
-# ESP-IDF generated
+# ESP-IDF generated (build artifacts; keep sdkconfig.common / sdkconfig.s3 / sdkconfig.esp32)
 sdkconfig
 sdkconfig.old
+sdkconfig.defaults
+sdkconfig.nodemcu-32s
+sdkconfig.esp32-s3-devkitc-1
 build/
 
 # IDE

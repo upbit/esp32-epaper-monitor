@@ -1,8 +1,5 @@
-# ESP-IDF default config for e-paper-monitor (overrides applied at first build)
-
-# --- Flash (ESP32-WROOM-32 = 4MB) ---
-CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
-CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+# Shared ESP-IDF defaults for e-paper-monitor (all environments)
+# Board-specific flash/PSRAM/partition settings live in sdkconfig.<board>
 
 # --- Logging ---
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
@@ -22,6 +19,6 @@ CONFIG_ESP_TLS_SKIP_SERVER_CERT_VERIFY=y
 # --- Main task stack (app_main) ---
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
 
-# --- Compiler: enable C++ exceptions off to save flash (we avoid throwing) ---
+# --- Compiler: C++ exceptions off to save flash (we avoid throwing) ---
 CONFIG_COMPILER_CXX_EXCEPTIONS=n
 CONFIG_COMPILER_OPTIMIZATION_SIZE=y
